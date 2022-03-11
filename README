@@ -1,0 +1,78 @@
+Mihai Ionescu, 325CD
+Tema 1 - Protocoale de Comunicatie
+
+> Tabela de rutare
+
+Tabela de rutare a fost implementata folosind un Trie binar, care retine
+prefixurile astfel: in fiecare nod se retine cate un bit din prefix si
+eventual o referinta la o stuctura route_entry (intrare in tabela de rutare:
+prefix, next hop IP, subnet mask, interfata). Fiecare nod are doi copii:
+left, care continua path-ul catre prefixul care se continua cu bitul 0
+si analog, right, pentru bitul 1. Nodul care contine cel mai nesemnificativ
+bit din reprezentarea prefixului va contine referinta la intrarea din tabela
+(ex: pentru un subnet mask de 24/, acesta va fi al 24-lea). 
+
+La cautarea celui mai lung prefix in tabela de rutare, se va parcurge Trie-ul
+conform bitilor din adresa IP-destinatie. Se va alege tabela de rutare care
+e continuta de cel mai "adanc" nod din path (sau NULL, daca nu se gaseste o
+referinta nenula).
+
+Desi aceasta metoda este eficienta temporal (avand o complexitate de O(32)
+pentru cautarea unui prefix in tabela), este ineficienta ca memorie, deoarece
+foloseste maxim 32 de noduri pentru reprezentarea unei singure intrari.
+O imbunatatire ar fi implementarea unui Radix / PATRICIA Trie.
+
+> Primire pachet ARP request
+
+- daca este destinat interfetei router-ului, se genereaza un ARP reply care
+contine in payload ca sursa: adresele MAC si IP ale interfetei respective si
+ca destinatie, adresele MAC si IP ale sursei cererii ARP.
+- altfel, se da drop la cerere, din moment ce pachetele ARP nu se ruteaza.
+
+> Primire pachet ARP reply
+
+- se adauga o noua intrare in tabela ARP, care contine perechea IP-MAC obtinuta
+din raspunsul ARP;
+- se parcurge coada: se scot pe rand pachetele pentru care a aparut in tabela
+ARP o intrare care corespunde next hop-ului acestora. Cand s-a ajuns la un
+pachet care nu exista intrare ARP, acest proces se termina;
+- se completeaza header-ul Ethernet al acestora cu adresa;
+MAC sursa (a interfetei) si MAC destinatie = MAC-ul identificat al next hop-ului;
+- se trimit catre next hop.
+
+(Nota: structurile din coada (enqueued_packet) contin un pachet si ruta pe care
+va fi trimis, pentru a evita cautarea redundanta a acesteia)
+
+> Primire pachet ICMP Echo request
+
+- daca este destinat unei interfete a routerului, se genereaza un Echo
+reply in care se interschimba adresele MAC, respectiv adresele IP (functia
+build_echo_reply, asemanatoare cu cea implementata in laboratorul 5); se trimite
+pe interfata pe care s-a primit cererea;
+- altfel:
+ - se verifica TTL; daca are o valoare sub 2, se va trimite un pachet de tip
+   ICMP Time exceeded catre IP-ul sursa al pachetului original;
+ - se recalculeaza checksum-ul IP, verificand daca este acelasi cu cel din
+   header (drop in caz contrar);
+ - se decrementeaza TTL;
+ - se recalculeaza checksum-ul;
+ - se gaseste ruta cu cel mai lung prefix care corespunde adresei destinatie
+   a pachetului; daca aceasta nu exista => se trimite un mesaj de tip
+   ICMP Destination Unreachable catre IP-ul sursa al pachetului original.
+ - se cauta MAC-ul care corespunde adresei next hop-ului din ruta gasita;
+ - daca acesta se afla in tabela ARP, se schimba adresa MAC sursa a frame-ului
+   cu adresa MAC a interfetei corespunzatoare rutei, si adresa MAC destinatie -
+   cu adresa MAC corespunzatoare intrarii din tabela ARP si pachetul se trimite
+   pe interfata rutei;
+ - altfel, se genereaza un ARP Request cu adresa destinatie MAC = broadcast si
+   adresa IP destinatie din payload = adresa next hop-ului, a carei adresa MAC
+   trebuie gasita pentru completarea header-ului Ethernet in vederea trimiterii
+   pachetului.
+
+Nota: functia get_interface_ip_int32 contine codul din get_interface_ip din
+schelet, dar fara transformarea din int in string de la final.
+
+Aspecte de imbunatatit in versiuni ulterioare a temei:
+- Utilizarea structurii PATRICIA Trie in loc de Trie-ul binar folosit pentru
+  retinerea intrarilor din tabela de rutare;
+- Modularizarea functiei main
